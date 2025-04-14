@@ -6,8 +6,8 @@ import {
   weekdayList,
 } from "./const/constData";
 import data from "./data/schedule.json";
-import { Course, Kdb } from "./types/Kdb";
-import { ScheduleData } from "./types/scheduleData";
+import type { Course, Kdb } from "./types/Kdb";
+import type { ScheduleData } from "./types/scheduleData";
 
 const scheduleData: ScheduleData = data;
 
@@ -100,7 +100,11 @@ const getModulePeriodList = (
   return modulePeriodList;
 };
 
-const getSpan = (module: string, period: string): string => {
+const getSpan = (
+  module: string,
+  beginPeriod: string,
+  endPeriod: string,
+): string => {
   let beginDate = "";
   const DTSTART = "DTSTART;TZID=Asia/Tokyo:";
   const DTEND = "DTEND;TZID=Asia/Tokyo:";
@@ -109,50 +113,58 @@ const getSpan = (module: string, period: string): string => {
   if (module[0] === "春") {
     switch (module[1]) {
       case "A":
-        beginDate = beginSpringA[period[0]];
+        beginDate = beginSpringA[beginPeriod[0]];
         break;
 
       case "B":
-        beginDate = beginSpringB[period[0]];
+        beginDate = beginSpringB[beginPeriod[0]];
         break;
 
       case "C":
-        beginDate = beginSpringC[period[0]];
+        beginDate = beginSpringC[beginPeriod[0]];
         break;
     }
   } else {
     switch (module[1]) {
       case "A":
-        beginDate = beginFallA[period[0]];
+        beginDate = beginFallA[beginPeriod[0]];
         break;
 
       case "B":
-        beginDate = beginFallB[period[0]];
+        beginDate = beginFallB[beginPeriod[0]];
         break;
 
       case "C":
-        beginDate = beginFallC[period[0]];
+        beginDate = beginFallC[beginPeriod[0]];
         break;
     }
   }
 
   //Get the start and end time of the course
-  const beginPeriod: string = classBeginPeriod[parseInt(period.slice(1, 2))];
-  const endPeriod: string = classEndPeriod[parseInt(period.slice(-1))];
+  const _beginPeriod: string =
+    classBeginPeriod[Number.parseInt(beginPeriod.slice(1, 2))];
+  const _endPeriod: string =
+    classEndPeriod[Number.parseInt(endPeriod.slice(-1))];
 
-  return createDateFormat(DTSTART, beginDate, beginPeriod, DTEND, endPeriod);
+  return createDateFormat(DTSTART, beginDate, _beginPeriod, DTEND, _endPeriod);
 };
 
-const addReschedule = (index: number, period: string): string => {
+const addReschedule = (
+  index: number,
+  beginPeriod: string,
+  endPeriod: string,
+): string => {
   const beginDate: string = rescheduledDateList[index];
   const DTSTART = "DTSTART;TZID=Asia/Tokyo:";
   const DTEND = "DTEND;TZID=Asia/Tokyo:";
 
   //Get the start and end time of the course
-  const beginPeriod: string = classBeginPeriod[parseInt(period.slice(1, 2))];
-  const endPeriod: string = classEndPeriod[parseInt(period.slice(-1))];
+  const _beginPeriod: string =
+    classBeginPeriod[Number.parseInt(beginPeriod.slice(1, 2))];
+  const _endPeriod: string =
+    classEndPeriod[Number.parseInt(endPeriod.slice(-1))];
 
-  return createDateFormat(DTSTART, beginDate, beginPeriod, DTEND, endPeriod);
+  return createDateFormat(DTSTART, beginDate, _beginPeriod, DTEND, _endPeriod);
 };
 
 const getRepeat = (module: string, period: string): string => {
@@ -204,7 +216,8 @@ const getMisc = (name: string, classroom: string, desc: string): string => {
 };
 
 const removeHolidays = (module: string, period: string): string => {
-  const beginPeriod: string = classBeginPeriod[parseInt(period.slice(1, 2))];
+  const beginPeriod: string =
+    classBeginPeriod[Number.parseInt(period.slice(1, 2))];
   let holidaysList: string[] = [];
   let exdate = "EXDATE:";
 
@@ -243,7 +256,8 @@ const removeHolidays = (module: string, period: string): string => {
 
 //For ABC classes
 const removeABCHolidays = (module: string, period: string): string => {
-  const beginPeriod: string = classBeginPeriod[parseInt(period.slice(1, 2))];
+  const beginPeriod: string =
+    classBeginPeriod[Number.parseInt(period.slice(1, 2))];
   const holidaysList = module[0] === "春" ? springABCHolidays : fallABCHolidays;
   let exdate = "EXDATE:";
 
@@ -274,11 +288,77 @@ const addDeadlines = (): string => {
   return deadlinesList.join("");
 };
 
+function groupConsecutivePeriods(data: string[][]): string[][][] {
+  const result: string[][][] = [];
+
+  // Convert a string to a period number (e.g. 'Tue 1' → { day: 'Tue', period: 1 })
+  const parseDayAndPeriod = (str: string) => {
+    const day = str[0];
+    const period = Number.parseInt(str.slice(1), 10);
+    return { day, period };
+  };
+
+  // Timed group definition
+  const validSequences = [
+    [1, 2],
+    [3, 4, 5, 6],
+  ];
+
+  // Group by same key
+  const groups: { [key: string]: string[][] } = {};
+  for (const pair of data) {
+    const key = `${pair[0]}-${pair[1][0]}`; // 例: '秋AB-火'
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(pair);
+  }
+
+  for (const key in groups) {
+    const group = groups[key];
+
+    // Sort by time period
+    group.sort((a, b) => {
+      const pa = parseDayAndPeriod(a[1]);
+      const pb = parseDayAndPeriod(b[1]);
+      return pa.period - pb.period;
+    });
+
+    let current: string[][] = [];
+    for (let i = 0; i < group.length; i++) {
+      const currentPeriod = parseDayAndPeriod(group[i][1]).period;
+
+      if (current.length === 0) {
+        current.push(group[i]);
+      } else {
+        const lastPeriod = parseDayAndPeriod(
+          current[current.length - 1][1],
+        ).period;
+        const sequence = validSequences.find((seq) => seq.includes(lastPeriod));
+
+        if (
+          sequence?.includes(currentPeriod) &&
+          currentPeriod === lastPeriod + 1
+        ) {
+          current.push(group[i]);
+        } else {
+          result.push(current);
+          current = [group[i]];
+        }
+      }
+    }
+
+    if (current.length > 0) {
+      result.push(current);
+    }
+  }
+
+  return result;
+}
+
 export const parseCSV = (
   tmpidList: string[],
   kdb: Kdb,
   ifDeadlinesIncluded: boolean,
-  isFromKdbAlt: boolean,
+  combineSameClasses = false,
 ): string => {
   let output =
     "BEGIN:VCALENDAR\nPRODID:-//gam0022//TwinC 1.0//EN\nVERSION:2.0\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nX-WR-CALNAME:授業時間割\nX-WR-TIMEZONE:Asia/Tokyo\nX-WR-CALDESC:授業時間割\nBEGIN:VTIMEZONE\nTZID:Asia/Tokyo\nX-LIC-LOCATION:Asia/Tokyo\nBEGIN:STANDARD\nTZOFFSETFROM:+0900\nTZOFFSETTO:+0900\nTZNAME:JST\nDTSTART:19700102T000000\nEND:STANDARD\nEND:VTIMEZONE\n";
@@ -290,16 +370,9 @@ export const parseCSV = (
   const eventBegin = "BEGIN:VEVENT\n";
   const eventEnd = "\nEND:VEVENT\n";
   const courseList: Course[] = [];
-  let idListLength: number;
-
-  if (isFromKdbAlt) {
-    idListLength = idList.length;
-  } else {
-    idListLength = idList.length - 1;
-  }
 
   //Search courses
-  for (let i = 0; i < idListLength; i++) {
+  for (let i = 0; i < idList.length; i++) {
     try {
       courseList.push(kdb[idList[i]]);
     } catch (error) {
@@ -326,39 +399,53 @@ export const parseCSV = (
       moduleList,
       periodList,
     );
+
+    const groupedModulePeriodList = combineSameClasses
+      ? groupConsecutivePeriods(modulePeriodList)
+      : [modulePeriodList];
+
     let module: string;
     let period: string;
     let devidedModule: string;
     let devidedPeriod: string;
 
-    for (let j = 0; j < modulePeriodList.length; j++) {
-      module = modulePeriodList[j][0];
-      period = modulePeriodList[j][1];
+    for (let j = 0; j < groupedModulePeriodList.length; j++) {
+      module = groupedModulePeriodList[j][0][0];
+      const beginPeriod = groupedModulePeriodList[j][0][1];
+      const endPeriod =
+        groupedModulePeriodList[j][groupedModulePeriodList[j].length - 1][1];
       let icsEvent = "";
 
-      if (!isAvailableModule(module) || !isAvailableDay(period)) continue;
+      if (
+        !isAvailableModule(module) ||
+        !isAvailableDay(beginPeriod) ||
+        !isAvailableDay(endPeriod)
+      )
+        continue;
 
       if (module.slice(1) === "ABC") {
         icsEvent =
-          getSpan(module, period) +
-          getABCRepeat(module, period) +
+          getSpan(module, beginPeriod, endPeriod) +
+          getABCRepeat(module, beginPeriod) +
           getMisc(name, classroom, description);
         output += eventBegin + icsEvent + eventEnd;
       } else {
         icsEvent =
-          getSpan(module, period) +
-          getRepeat(module, period) +
+          getSpan(module, beginPeriod, endPeriod) +
+          getRepeat(module, beginPeriod) +
           getMisc(name, classroom, description);
         output += eventBegin + icsEvent + eventEnd;
       }
+
       for (let k = 1; k < module.length; k++) {
         devidedModule = module[0] + module[k];
-        devidedPeriod = period[0];
+        devidedPeriod = beginPeriod[0];
 
         for (let i = 0; i < rescheduledClassList.length; i++) {
           if (rescheduledClassList[i] === `${devidedModule}:${devidedPeriod}`) {
             icsEvent =
-              addReschedule(i, period) + getMisc(name, classroom, description);
+              addReschedule(i, beginPeriod, endPeriod) +
+              getMisc(name, classroom, description);
             output += eventBegin + icsEvent + eventEnd;
           }
         }
