@@ -359,6 +359,7 @@ export const parseCSV = (
   kdb: Kdb,
   ifDeadlinesIncluded: boolean,
   combineSameClasses = false,
+  classroomMap: Record<string, string> = {},
 ): string => {
   let output =
     "BEGIN:VCALENDAR\nPRODID:-//gam0022//TwinC 1.0//EN\nVERSION:2.0\nCALSCALE:GREGORIAN\nMETHOD:PUBLISH\nX-WR-CALNAME:授業時間割\nX-WR-TIMEZONE:Asia/Tokyo\nX-WR-CALDESC:授業時間割\nBEGIN:VTIMEZONE\nTZID:Asia/Tokyo\nX-LIC-LOCATION:Asia/Tokyo\nBEGIN:STANDARD\nTZOFFSETFROM:+0900\nTZOFFSETTO:+0900\nTZNAME:JST\nDTSTART:19700102T000000\nEND:STANDARD\nEND:VTIMEZONE\n";
@@ -390,27 +391,22 @@ export const parseCSV = (
       name = courseList[i].name;
       moduleList = courseList[i].module;
       periodList = courseList[i].period;
-      classroom = courseList[i].room;
+      classroom = classroomMap[idList[i]] || courseList[i].room;
       description = courseList[i].description;
     } catch (error) {
       continue;
     }
+
     const modulePeriodList: string[][] = getModulePeriodList(
       moduleList,
       periodList,
     );
-
     const groupedModulePeriodList = combineSameClasses
       ? groupConsecutivePeriods(modulePeriodList)
       : [modulePeriodList];
 
-    let module: string;
-    let period: string;
-    let devidedModule: string;
-    let devidedPeriod: string;
-
     for (let j = 0; j < groupedModulePeriodList.length; j++) {
-      module = groupedModulePeriodList[j][0][0];
+      const module = groupedModulePeriodList[j][0][0];
       const beginPeriod = groupedModulePeriodList[j][0][1];
       const endPeriod =
         groupedModulePeriodList[j][groupedModulePeriodList[j].length - 1][1];
@@ -438,8 +434,8 @@ export const parseCSV = (
       }
 
       for (let k = 1; k < module.length; k++) {
-        devidedModule = module[0] + module[k];
-        devidedPeriod = beginPeriod[0];
+        const devidedModule = module[0] + module[k];
+        const devidedPeriod = beginPeriod[0];
 
         for (let i = 0; i < rescheduledClassList.length; i++) {
           if (rescheduledClassList[i] === `${devidedModule}:${devidedPeriod}`) {
