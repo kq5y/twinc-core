@@ -51,3 +51,32 @@ describe("parseCSV", () => {
     expect(ics).toMatchSnapshot();
   });
 });
+
+describe("parseCSV with classroomMap and combineSameClasses", () => {
+  it("should override the classroom when classroomMap is provided", () => {
+    const ics = parseCSV(
+      ["GC22201"],
+      kdb,
+      false,
+      false,
+      { GC22201: "TEST_ROOM" },
+    );
+
+    expect(ics).toContain("LOCATION:TEST_ROOM");
+    expect(ics).toContain("DTSTART;TZID=Asia/Tokyo:20260416T084000");
+  });
+
+  it("should combine consecutive periods into a single event", () => {
+    const ics = parseCSV(
+      ["GC22201"],
+      kdb,
+      false,
+      true,
+      { GC22201: "TEST_ROOM" },
+    );
+
+    expect(ics).toContain("DTEND;TZID=Asia/Tokyo:20260416T112500");
+    expect(ics).toContain("LOCATION:TEST_ROOM");
+    expect((ics.match(/BEGIN:VEVENT/g) ?? []).length).toBe(1);
+  });
+});

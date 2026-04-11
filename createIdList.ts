@@ -1,14 +1,16 @@
+const normalize = (value: string) =>
+  value.replace(/\uFEFF/g, "").replace(/"/g, "").trim();
+
+const isCourseId = (value: string) =>
+  /^(?=.*[A-Z].*[A-Z])(?=.*\d.*\d.*\d.*\d)[A-Z0-9]{7,8}$/.test(value);
+
 export const createIdList = (fileContent: string, isFromKdBAlt: boolean) => {
-  const idList = isFromKdBAlt
-    ? fileContent
-        .split("\n")
-        .map((x) => x.replace('"', ""))
-        .map((x) => x.split(",")[0])
-        .filter((x) => x !== "科目番号")
-        .filter((x, i, self) => self.indexOf(x) === i)
-    : fileContent
-        .split("\n")
-        .filter((x, i, self) => self.indexOf(x) === i)
-        .map((x) => x.replace(/"/g, ""));
-  return idList.map((x) => x.trim()).filter((x) => x !== "");
+  const candidates = isFromKdBAlt
+    ? fileContent.split("\n").map((line) => normalize(line.split(",")[0] ?? ""))
+    : fileContent.split("\n").map(normalize);
+
+  return candidates
+    .filter((value) => value !== "科目番号")
+    .filter(isCourseId)
+    .filter((value, index, self) => self.indexOf(value) === index);
 };
